@@ -1,0 +1,251 @@
+import discord
+from discord.ext import commands
+import json
+import os
+
+# ======================
+# CONFIGURACIÓN
+# ======================
+
+PREFIX = "+"
+TOKEN = os.getenv("TOKEN")
+
+LOG_CHANNEL_ID = 1456092888952737833
+
+STAFF_IDS = [
+    1418712877426016319,
+    1416613885997355029
+]
+
+MAX_POINTS = 50
+
+ROLE_REWARDS = {
+    10: 1454953357360759018,
+    20: 1454956321672790137,
+    30: 1454956952504369202,
+    40: 1454958077412376769,
+    50: 1454958494649155746
+}
+
+POINTS_FILE = "points.json"
+
+# ======================
+# BOT SETUP
+# ======================
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+bot = commands.Bot(
+    command_prefix=PREFIX,
+    intents=intents,
+    help_command=None
+)
+
+# ======================
+# UTILIDADES
+# ======================
+
+def load_points():
+    if not os.path.exists(POINTS_FILE):
+        with open(POINTS_FILE, "w") as f:
+            json.dump({}, f)
+    with open(POINTS_FILE, "r") as f:
+        return json.load(f)
+
+def save_points(data):
+    with open(POINTS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def is_staff(ctx):
+    return ctx.author.id in STAFF_IDS
+
+async def send_log(guild, embed):
+    channel = guild.get_channel(LOG_CHANNEL_ID)
+    if channel:
+        await channel.send(embed=embed)
+
+# ======================
+# EVENTO READY
+# ======================
+
+@bot.event
+async def on_ready():
+    print(f"✅ Conectado como {bot.user}")
+
+# ======================
+# HELP ELEGANTE
+# ======================
+
+@bot.command()
+async def help(ctx):
+    embed = discord.Embed(
+        title="📘 SAFE POINTS | SABH",
+        description="Sistema profesional de puntos",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(
+        name="👥 Comandos",
+        value=(
+            "`+points` `+ranking` `+perfil`\n"
+            "`+ola` `+heaven` `+angel`\n"
+            "`+montero` `+itadori` `+kuro` `+noob`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛡️ Staff",
+        value="`+dar` `+restar` `+resetpoints`",
+        inline=False
+    )
+
+    embed.set_footer(text="SAFE POINTS SABH • Bot oficial")
+    await ctx.send(embed=embed)
+
+# ======================
+# COMANDOS USUARIOS
+# ======================
+
+@bot.command()
+async def ola(ctx):
+    await ctx.send(embed=discord.Embed(
+        description=f"👋 Hola {ctx.author.mention}",
+        color=discord.Color.green()
+    ))
+
+@bot.command()
+async def points(ctx):
+    data = load_points()
+    pts = data.get(str(ctx.author.id), 0)
+
+    await ctx.send(embed=discord.Embed(
+        title="⭐ Tus puntos",
+        description=f"**{pts}/{MAX_POINTS}** puntos",
+        color=discord.Color.gold()
+    ))
+
+@bot.command()
+async def ranking(ctx):
+    data = load_points()
+    ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    text = ""
+    for i, (uid, pts) in enumerate(ranking, start=1):
+        member = ctx.guild.get_member(int(uid))
+        if member:
+            text += f"**{i}.** {member.mention} — `{pts}` pts\n"
+
+    await ctx.send(embed=discord.Embed(
+        title="🏆 Ranking",
+        description=text or "Sin datos",
+        color=discord.Color.purple()
+    ))
+
+@bot.command()
+async def perfil(ctx):
+    data = load_points()
+    pts = data.get(str(ctx.author.id), 0)
+
+    embed = discord.Embed(title="📄 Perfil", color=discord.Color.blurple())
+    embed.add_field(name="Usuario", value=ctx.author.mention)
+    embed.add_field(name="Puntos", value=f"{pts}/{MAX_POINTS}")
+    embed.set_thumbnail(url=ctx.author.avatar.url if ctx.author.avatar else None)
+
+    await ctx.send(embed=embed)
+
+# ======================
+# COMANDOS TEXTO (NO TOCADOS)
+# ======================
+
+@bot.command()
+async def heaven(ctx):
+    await ctx.send("🔥 **Heaven** — el mejor estafador de chilitos")
+
+@bot.command()
+async def montero(ctx):
+    await ctx.send("👑 **Montero** — owner de la comunidad y programador destacado")
+
+@bot.command()
+async def itadori(ctx):
+    await ctx.send("🛡️ **Itadori** — el mejor head admin")
+
+@bot.command()
+async def angel(ctx):
+    await ctx.send("💻 **Angel** — programador destacado")
+
+@bot.command()
+async def kuro(ctx):
+    await ctx.send("🖤 **Kuro** — creador del bot")
+
+@bot.command()
+async def noob(ctx):
+    await ctx.send("🤡 noob")
+
+# ======================
+# COMANDOS STAFF (PROTEGIDOS POR ID)
+# ======================
+
+@bot.command()
+async def dar(ctx, member: discord.Member, cantidad: int):
+    if not is_staff(ctx):
+        return
+
+    data = load_points()
+    uid = str(member.id)
+    data[uid] = min(MAX_POINTS, data.get(uid, 0) + cantidad)
+    save_points(data)
+
+    embed = discord.Embed(
+        title="➕ Puntos añadidos",
+        description=f"{member.mention} ahora tiene **{data[uid]}** puntos",
+        color=discord.Color.green()
+    )
+
+    await ctx.send(embed=embed)
+    await send_log(ctx.guild, embed)
+
+@bot.command()
+async def restar(ctx, member: discord.Member, cantidad: int):
+    if not is_staff(ctx):
+        return
+
+    data = load_points()
+    uid = str(member.id)
+    data[uid] = max(0, data.get(uid, 0) - cantidad)
+    save_points(data)
+
+    embed = discord.Embed(
+        title="➖ Puntos restados",
+        description=f"{member.mention} ahora tiene **{data[uid]}** puntos",
+        color=discord.Color.red()
+    )
+
+    await ctx.send(embed=embed)
+    await send_log(ctx.guild, embed)
+
+@bot.command()
+async def resetpoints(ctx, member: discord.Member):
+    if not is_staff(ctx):
+        return
+
+    data = load_points()
+    data[str(member.id)] = 0
+    save_points(data)
+
+    embed = discord.Embed(
+        title="♻️ Reset de puntos",
+        description=f"Puntos de {member.mention} reiniciados",
+        color=discord.Color.orange()
+    )
+
+    await ctx.send(embed=embed)
+    await send_log(ctx.guild, embed)
+
+# ======================
+# RUN
+# ======================
+
+bot.run(TOKEN)
